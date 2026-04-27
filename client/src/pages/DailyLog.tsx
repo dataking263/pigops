@@ -6,6 +6,7 @@ import {
   Stethoscope,
   DollarSign,
   Scale,
+  Receipt,
 } from "lucide-react";
 import { PageHeader } from "@/components/AppShell";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
@@ -16,9 +17,10 @@ import {
   DeathLogForm,
   BirthLogForm,
   SaleLogForm,
+  ExpenseLogForm,
 } from "@/components/LogForms";
 
-type Action = "feed" | "weight" | "treatment" | "death" | "birth" | "sale" | null;
+type Action = "feed" | "weight" | "treatment" | "death" | "birth" | "sale" | "expense" | null;
 
 const ACTION_TILES: { key: Exclude<Action, null>; label: string; icon: any; tone: string; desc: string }[] = [
   { key: "feed", label: "Log Feed", icon: Wheat, tone: "bg-[hsl(35_70%_92%)] text-[hsl(25_60%_30%)] dark:bg-[hsl(35_25%_22%)] dark:text-[hsl(35_60%_72%)]", desc: "Bags opened" },
@@ -27,6 +29,7 @@ const ACTION_TILES: { key: Exclude<Action, null>; label: string; icon: any; tone
   { key: "birth", label: "Log Birth", icon: Baby, tone: "bg-[hsl(35_70%_92%)] text-[hsl(35_70%_30%)] dark:bg-[hsl(35_25%_22%)] dark:text-[hsl(35_70%_72%)]", desc: "Sow farrowed" },
   { key: "death", label: "Log Death", icon: Skull, tone: "bg-[hsl(4_70%_94%)] text-[hsl(4_70%_35%)] dark:bg-[hsl(4_50%_22%)] dark:text-[hsl(4_70%_72%)]", desc: "Photo gated" },
   { key: "sale", label: "Log Sale", icon: DollarSign, tone: "bg-[hsl(140_25%_92%)] text-[hsl(140_25%_28%)] dark:bg-[hsl(140_20%_18%)] dark:text-[hsl(140_30%_70%)]", desc: "Buyer, price" },
+  { key: "expense", label: "Log Expense", icon: Receipt, tone: "bg-[hsl(14_60%_94%)] text-[hsl(14_60%_30%)] dark:bg-[hsl(14_40%_22%)] dark:text-[hsl(14_60%_72%)]", desc: "Feed, meds, wages" },
 ];
 
 const TITLE: Record<Exclude<Action, null>, string> = {
@@ -36,6 +39,7 @@ const TITLE: Record<Exclude<Action, null>, string> = {
   death: "Log death",
   birth: "Log birth",
   sale: "Log sale",
+  expense: "Log expense",
 };
 
 export default function DailyLog() {
@@ -44,9 +48,9 @@ export default function DailyLog() {
   // Read action from window for command-palette deep-link
   useEffect(() => {
     const a = (window as any).__pgyAction as string | undefined;
-    if (a && ["feed","weight","treatment","death","birth","sale"].some((k) => a.includes(k))) {
+    if (a && ["feed","weight","treatment","death","birth","sale","expense"].some((k) => a.includes(k))) {
       const m = a.match(/action=(\w+)/);
-      if (m && ["feed","weight","treatment","death","birth","sale"].includes(m[1])) {
+      if (m && ["feed","weight","treatment","death","birth","sale","expense"].includes(m[1])) {
         setAction(m[1] as Action);
       }
       (window as any).__pgyAction = undefined;
@@ -111,6 +115,7 @@ export default function DailyLog() {
             {action === "death" && <DeathLogForm onDone={close} />}
             {action === "birth" && <BirthLogForm onDone={close} />}
             {action === "sale" && <SaleLogForm onDone={close} />}
+            {action === "expense" && <ExpenseLogForm onDone={close} />}
           </div>
         </SheetContent>
       </Sheet>

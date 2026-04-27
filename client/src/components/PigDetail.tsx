@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { Link } from "wouter";
 import {
   Calendar,
   Tag,
@@ -13,6 +14,11 @@ import {
   Activity,
   TrendingUp,
   Loader2,
+  GitBranch,
+  Pencil,
+  ShoppingCart,
+  Heart,
+  ExternalLink,
 } from "lucide-react";
 import {
   LineChart,
@@ -26,12 +32,18 @@ import {
   Legend,
 } from "recharts";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from "@/components/ui/dialog";
 import { CategoryBadge, StatusBadge, EmptyState, ListSkeleton } from "./ui-bits";
 import { ageString, ageDays, ageWeeks, fmtDate, fmtKg, fmtRelative } from "@/lib/format";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { Pig, WeightLog, MedicalLog } from "@shared/schema";
+import type { Pig, WeightLog, MedicalLog, LineageResponse } from "@shared/schema";
 
 interface PigDetailData extends Pig {
   weights: WeightLog[];
@@ -106,9 +118,16 @@ export function PigDetail({ id, onClose }: { id: string; onClose: () => void }) 
               {data.breed ?? "—"} · {ageString(data.birth_date)} old
             </div>
           </div>
-          <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close" data-testid="button-detail-close">
-            <X className="h-4 w-4" />
-          </Button>
+          <div className="flex items-center gap-1">
+            <EditProfileButton pig={data} />
+            <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close" data-testid="button-detail-close">
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+        {/* Source badge */}
+        <div className="mt-2">
+          <SourceBadge pig={data} />
         </div>
 
         {/* Quick actions */}
@@ -151,10 +170,11 @@ export function PigDetail({ id, onClose }: { id: string; onClose: () => void }) 
             )}
 
             <Tabs defaultValue="all">
-              <TabsList className="w-full grid grid-cols-4" data-testid="tabs-detail">
+              <TabsList className="w-full grid grid-cols-5" data-testid="tabs-detail">
                 <TabsTrigger value="all" data-testid="tab-all">All</TabsTrigger>
                 <TabsTrigger value="weights" data-testid="tab-weights">Weights</TabsTrigger>
                 <TabsTrigger value="treatments" data-testid="tab-treatments">Treatments</TabsTrigger>
+                <TabsTrigger value="lineage" data-testid="tab-lineage">Lineage</TabsTrigger>
                 <TabsTrigger value="movements" data-testid="tab-movements">Movements</TabsTrigger>
               </TabsList>
               <TabsContent value="all">
@@ -165,6 +185,9 @@ export function PigDetail({ id, onClose }: { id: string; onClose: () => void }) 
               </TabsContent>
               <TabsContent value="treatments">
                 <TreatmentList pig={data} />
+              </TabsContent>
+              <TabsContent value="lineage">
+                <LineageTab pigId={data.id} />
               </TabsContent>
               <TabsContent value="movements">
                 <EmptyState
@@ -337,6 +360,170 @@ function WeightList({ pig }: { pig: PigDetailData }) {
         </li>
       ))}
     </ul>
+  );
+}
+
+function SourceBadge({ pig }: { pig: PigDetailData }) {
+  const { data: pigs = [] } = useQuery<Pig[]>({ queryKey: ["/api/pigs"] });
+  const byId = new Map(pigs.map((p) => [p.id, p] as const));
+  const mother = pig.mother_id ? byId.get(pig.mother_id) : null;
+  const father = pig.father_id ? byId.get(pig.father_id) : null;
+
+  if (pig.source === "Purchased") {
+    const ago = pig.purchase_date ? Math.floor((Date.now() - new Date(pig.purchase_date).getTime()) / (30 * 86400000)) : null;
+    return (
+      <span className="inline-flex items-center gap-2 rounded-md px-2.5 py-1 bg-purple-500/10 border border-purple-500/30 text-xs" data-testid="source-badge-purchased">
+        <ShoppingCart className="h-3 w-3" />
+        <span className="font-medium">Purchased</span>
+        {pig.purchase_price_usd != null && <span className="tabular-nums">${pig.purchase_price_usd}</span>}
+        {pig.purchase_supplier && <span className="text-muted-foreground">· {pig.purchase_supplier}</span>}
+        {ago != null && <span className="text-muted-foreground">· {ago}mo ago</span>}
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex flex-wrap items-center gap-2 rounded-md px-2.5 py-1 bg-emerald-500/10 border border-emerald-500/30 text-xs" data-testid="source-badge-bred">
+      <Heart className="h-3 w-3" />
+      <span className="font-medium">Bred</span>
+      {mother && (
+        <span className="text-muted-foreground">· Mother: {mother.name ?? mother.tag_id} ({mother.tag_id})</span>
+      )}
+      {father && (
+        <span className="text-muted-foreground">· Father: {father.name ?? father.tag_id} ({father.tag_id})</span>
+      )}
+    </span>
+  );
+}
+
+function LineageTab({ pigId }: { pigId: string }) {
+  const { data, isLoading } = useQuery<LineageResponse>({
+    queryKey: ["/api/pigs", pigId, "lineage"],
+    queryFn: async () => (await apiRequest("GET", `/api/pigs/${pigId}/lineage`)).json(),
+  });
+  if (isLoading || !data) return <ListSkeleton rows={4} />;
+  const { parents, full_siblings, half_siblings, offspring, coefficient_of_inbreeding } = data;
+  return (
+    <div className="mt-2 space-y-3">
+      <div className="flex items-center gap-2 text-xs">
+        <span className="text-muted-foreground uppercase tracking-wider text-[10px]">COI</span>
+        <span className="font-mono tabular-nums font-semibold">{(coefficient_of_inbreeding * 100).toFixed(1)}%</span>
+        <Link href={`/lineage/${pigId}`}>
+          <a className="ml-auto text-xs text-primary hover:underline inline-flex items-center gap-1" data-testid="link-open-lineage">
+            Open full tree <ExternalLink className="h-3 w-3" />
+          </a>
+        </Link>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <ParentTile label="Mother" node={parents.mother} />
+        <ParentTile label="Father" node={parents.father} />
+      </div>
+      <SiblingsRow title={`Full siblings · ${full_siblings.length}`} nodes={full_siblings} warn />
+      <SiblingsRow title={`Half siblings · ${half_siblings.length}`} nodes={half_siblings} />
+      <SiblingsRow title={`Offspring · ${offspring.length}`} nodes={offspring} />
+    </div>
+  );
+}
+
+function ParentTile({ label, node }: { label: string; node: any }) {
+  if (!node) return (
+    <div className="rounded-lg border border-dashed border-muted-foreground/30 p-3 text-xs text-muted-foreground italic">
+      {label}: Unknown
+    </div>
+  );
+  return (
+    <Link href={`/lineage/${node.id}`}>
+      <a className="rounded-lg border border-card-border bg-card p-3 hover:border-primary/50 transition block">
+        <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>
+        <div className="font-medium text-sm truncate">{node.name ?? "unnamed"}</div>
+        <div className="text-[11px] tabular-nums text-muted-foreground font-mono">{node.tag_id}</div>
+      </a>
+    </Link>
+  );
+}
+
+function SiblingsRow({ title, nodes, warn }: { title: string; nodes: any[]; warn?: boolean }) {
+  if (nodes.length === 0) return null;
+  return (
+    <div className={`rounded-lg border p-3 ${warn ? "border-amber-500/30 bg-amber-500/5" : "border-card-border bg-card"}`}>
+      <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">{title}</div>
+      <div className="flex flex-wrap gap-1.5">
+        {nodes.map((n) => (
+          <Link key={n.id} href={`/lineage/${n.id}`}>
+            <a className="text-[11px] rounded border border-card-border bg-background hover:border-primary/40 px-2 py-0.5 inline-flex items-center gap-1">
+              <span className="font-mono tabular-nums text-muted-foreground">{n.tag_id}</span>
+              {n.name && <span>{n.name}</span>}
+            </a>
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function EditProfileButton({ pig }: { pig: PigDetailData }) {
+  const { data: pigs = [] } = useQuery<Pig[]>({ queryKey: ["/api/pigs"] });
+  const sows = pigs.filter((p) => p.sex === "F" && p.id !== pig.id);
+  const boars = pigs.filter((p) => p.sex === "M" && p.id !== pig.id);
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState(pig.name ?? "");
+  const [notes, setNotes] = useState(pig.notes ?? "");
+  const [motherId, setMotherId] = useState(pig.mother_id ?? "");
+  const [fatherId, setFatherId] = useState(pig.father_id ?? "");
+  const { toast } = useToast();
+  const update = useMutation({
+    mutationFn: () => apiRequest("PATCH", `/api/pigs/${pig.id}`, {
+      name: name || null,
+      notes: notes || null,
+      mother_id: motherId || null,
+      father_id: fatherId || null,
+    }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/pigs"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/pigs", pig.id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/pigs", pig.id, "lineage"] });
+      toast({ title: "Profile updated" });
+      setOpen(false);
+    },
+  });
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <Button variant="ghost" size="icon" onClick={() => setOpen(true)} aria-label="Edit profile" data-testid="button-edit-profile">
+        <Pencil className="h-4 w-4" />
+      </Button>
+      <DialogContent>
+        <DialogHeader><DialogTitle>Edit profile · {pig.tag_id}</DialogTitle></DialogHeader>
+        <div className="space-y-3">
+          <div>
+            <Label>Name</Label>
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Daisy" data-testid="input-edit-name" />
+          </div>
+          <div>
+            <Label>Mother</Label>
+            <select className="w-full mt-1 rounded-md bg-background border border-input px-2 py-1.5 text-sm" value={motherId} onChange={(e) => setMotherId(e.target.value)} data-testid="select-edit-mother">
+              <option value="">— Unknown —</option>
+              {sows.map((p) => <option key={p.id} value={p.id}>{p.tag_id}{p.name ? ` · ${p.name}` : ""}</option>)}
+            </select>
+          </div>
+          <div>
+            <Label>Father</Label>
+            <select className="w-full mt-1 rounded-md bg-background border border-input px-2 py-1.5 text-sm" value={fatherId} onChange={(e) => setFatherId(e.target.value)} data-testid="select-edit-father">
+              <option value="">— Unknown —</option>
+              {boars.map((p) => <option key={p.id} value={p.id}>{p.tag_id}{p.name ? ` · ${p.name}` : ""}</option>)}
+            </select>
+          </div>
+          <div>
+            <Label>Notes</Label>
+            <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} data-testid="textarea-edit-notes" />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
+          <Button onClick={() => update.mutate()} disabled={update.isPending} data-testid="button-save-profile">
+            {update.isPending ? "Saving…" : "Save"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

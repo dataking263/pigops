@@ -80,6 +80,12 @@ export default {
           away: "rgb(245 158 11)",
           busy: "rgb(239 68 68)",
           offline: "rgb(156 163 175)",
+          good: "hsl(var(--status-good) / <alpha-value>)",
+          warn: "hsl(var(--status-warn) / <alpha-value>)",
+          alert: "hsl(var(--status-alert) / <alpha-value>)",
+          "good-bg": "hsl(var(--status-good-bg) / <alpha-value>)",
+          "warn-bg": "hsl(var(--status-warn-bg) / <alpha-value>)",
+          "alert-bg": "hsl(var(--status-alert-bg) / <alpha-value>)",
         },
       },
       fontFamily: {

@@ -9,7 +9,7 @@ export function Logo({ size = 28, className }: { size?: number; className?: stri
       viewBox="0 0 32 32"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
-      aria-label="Piggery Ops"
+      aria-label="PigOps"
       className={className}
     >
       {/* Rounded square mark */}
@@ -39,8 +39,8 @@ export function Wordmark({ className = "" }: { className?: string }) {
         <Logo size={28} />
       </span>
       <div className="flex flex-col leading-tight">
-        <span className="font-semibold text-[15px] tracking-tight">Piggery Ops</span>
-        <span className="text-[10px] text-muted-foreground tracking-wide uppercase">Run your farm anywhere</span>
+        <span className="font-semibold text-[15px] tracking-tight">PigOps</span>
+        <span className="text-[10px] text-muted-foreground tracking-wide uppercase">Makina Family Piggery</span>
       </div>
     </div>
   );

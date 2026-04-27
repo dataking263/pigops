@@ -17,6 +17,11 @@ export type TreatmentType = (typeof TREATMENT_TYPES)[number];
 export type DeathCause = (typeof DEATH_CAUSES)[number];
 
 // pigs
+export const PIG_SOURCES = ["Bred", "Purchased"] as const;
+export type PigSource = (typeof PIG_SOURCES)[number];
+export const PIG_SEXES = ["F", "M"] as const;
+export type PigSex = (typeof PIG_SEXES)[number];
+
 export const pigs = sqliteTable("pigs", {
   id: text("id").primaryKey(),
   tag_id: text("tag_id").notNull().unique(),
@@ -26,6 +31,16 @@ export const pigs = sqliteTable("pigs", {
   weight_at_weaning_kg: real("weight_at_weaning_kg"),
   current_pen: integer("current_pen"),
   breed: text("breed"),
+  // v2 additions
+  source: text("source").notNull().default("Bred"),
+  purchase_date: text("purchase_date"),
+  purchase_price_usd: real("purchase_price_usd"),
+  purchase_supplier: text("purchase_supplier"),
+  mother_id: text("mother_id"),
+  father_id: text("father_id"),
+  sex: text("sex").notNull().default("F"),
+  name: text("name"),
+  notes: text("notes"),
   created_at: text("created_at").notNull().default(sql`(CURRENT_TIMESTAMP)`),
 });
 
@@ -34,6 +49,8 @@ export const insertPigSchema = createInsertSchema(pigs)
   .extend({
     category: z.enum(PIG_CATEGORIES),
     status: z.enum(PIG_STATUSES).optional(),
+    source: z.enum(PIG_SOURCES).optional(),
+    sex: z.enum(PIG_SEXES).optional(),
   });
 export type InsertPig = z.infer<typeof insertPigSchema>;
 export type Pig = typeof pigs.$inferSelect;
@@ -186,6 +203,161 @@ export const insertSettingsSchema = createInsertSchema(settings).omit({ id: true
 export type InsertSettings = z.infer<typeof insertSettingsSchema>;
 export type Settings = typeof settings.$inferSelect;
 
+// pens
+export const pens = sqliteTable("pens", {
+  id: integer("id").primaryKey(),
+  role: text("role").notNull(),
+  notes: text("notes"),
+  last_cleaned_date: text("last_cleaned_date"),
+});
+
+export const insertPenSchema = createInsertSchema(pens);
+export type InsertPen = z.infer<typeof insertPenSchema>;
+export type Pen = typeof pens.$inferSelect;
+
+// medication_protocols
+export const PROTOCOL_TRIGGERS = [
+  "age_days",
+  "pre_farrow_days",
+  "post_weaning_days",
+  "recurring_days",
+  "event_birth",
+  "event_weaning",
+] as const;
+export type ProtocolTrigger = (typeof PROTOCOL_TRIGGERS)[number];
+
+export const medicationProtocols = sqliteTable("medication_protocols", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  category: text("category").notNull(),
+  trigger_type: text("trigger_type").notNull(),
+  trigger_value: integer("trigger_value").notNull().default(0),
+  product_name: text("product_name").notNull(),
+  dose: text("dose").notNull(),
+  route: text("route").notNull(),
+  estimated_cost_usd: real("estimated_cost_usd").notNull().default(0),
+  rationale: text("rationale"),
+  is_critical: integer("is_critical").notNull().default(0),
+  enabled: integer("enabled").notNull().default(1),
+});
+
+export const insertMedicationProtocolSchema = createInsertSchema(medicationProtocols).omit({ id: true });
+export type InsertMedicationProtocol = z.infer<typeof insertMedicationProtocolSchema>;
+export type MedicationProtocol = typeof medicationProtocols.$inferSelect;
+
+// pen_reminders
+export const REMINDER_STATUSES = ["pending", "done", "snoozed", "skipped"] as const;
+export type ReminderStatus = (typeof REMINDER_STATUSES)[number];
+
+export const penReminders = sqliteTable("pen_reminders", {
+  id: text("id").primaryKey(),
+  pen: integer("pen").notNull(),
+  pig_id: text("pig_id"),
+  protocol_id: text("protocol_id").notNull(),
+  due_date: text("due_date").notNull(),
+  status: text("status").notNull().default("pending"),
+  created_at: text("created_at").notNull(),
+  completed_at: text("completed_at"),
+  completed_medical_log_id: text("completed_medical_log_id"),
+});
+
+export const insertPenReminderSchema = createInsertSchema(penReminders).omit({ id: true });
+export type InsertPenReminder = z.infer<typeof insertPenReminderSchema>;
+export type PenReminder = typeof penReminders.$inferSelect;
+
+// employees
+export const employees = sqliteTable("employees", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  role: text("role").notNull(),
+  start_date: text("start_date").notNull(),
+  monthly_wage_usd: real("monthly_wage_usd").notNull().default(100),
+  active: integer("active").notNull().default(1),
+});
+export const insertEmployeeSchema = createInsertSchema(employees).omit({ id: true });
+export type InsertEmployee = z.infer<typeof insertEmployeeSchema>;
+export type Employee = typeof employees.$inferSelect;
+
+// expenses
+export const EXPENSE_CATEGORIES = [
+  "Feed",
+  "Medication",
+  "Equipment",
+  "Pig Purchase",
+  "Wages",
+  "Utilities",
+  "Veterinary",
+  "Transport",
+  "Other",
+] as const;
+export type ExpenseCategory = (typeof EXPENSE_CATEGORIES)[number];
+
+export const expenses = sqliteTable("expenses", {
+  id: text("id").primaryKey(),
+  date: text("date").notNull(),
+  category: text("category").notNull(),
+  description: text("description").notNull(),
+  amount_usd: real("amount_usd").notNull(),
+  vendor: text("vendor"),
+  linked_pig_id: text("linked_pig_id"),
+  linked_employee_id: text("linked_employee_id"),
+  linked_feed_lot_id: text("linked_feed_lot_id"),
+  created_at: text("created_at").notNull(),
+});
+export const insertExpenseSchema = createInsertSchema(expenses)
+  .omit({ id: true, created_at: true })
+  .extend({ category: z.enum(EXPENSE_CATEGORIES) });
+export type InsertExpense = z.infer<typeof insertExpenseSchema>;
+export type Expense = typeof expenses.$inferSelect;
+
+// income
+export const INCOME_CATEGORIES = ["Pig Sale", "Manure Sale", "Other"] as const;
+export type IncomeCategory = (typeof INCOME_CATEGORIES)[number];
+
+export const income = sqliteTable("income", {
+  id: text("id").primaryKey(),
+  date: text("date").notNull(),
+  category: text("category").notNull(),
+  description: text("description").notNull(),
+  amount_usd: real("amount_usd").notNull(),
+  linked_sale_id: text("linked_sale_id"),
+  created_at: text("created_at").notNull(),
+});
+export const insertIncomeSchema = createInsertSchema(income)
+  .omit({ id: true, created_at: true })
+  .extend({ category: z.enum(INCOME_CATEGORIES) });
+export type InsertIncome = z.infer<typeof insertIncomeSchema>;
+export type Income = typeof income.$inferSelect;
+
+// payroll_runs
+export const payrollRuns = sqliteTable("payroll_runs", {
+  id: text("id").primaryKey(),
+  month: text("month").notNull(), // YYYY-MM
+  run_date: text("run_date").notNull(),
+  total_usd: real("total_usd").notNull(),
+  status: text("status").notNull().default("pending"),
+});
+export const insertPayrollRunSchema = createInsertSchema(payrollRuns).omit({ id: true });
+export type InsertPayrollRun = z.infer<typeof insertPayrollRunSchema>;
+export type PayrollRun = typeof payrollRuns.$inferSelect;
+
+// Joined types for API responses
+export interface PenSummary {
+  id: number;
+  role: string;
+  notes: string | null;
+  last_cleaned_date: string | null;
+  occupancy: number;
+  category_mix: Record<string, number>;
+  health_status: "green" | "amber" | "red";
+  next_due_reminder: (PenReminder & { protocol: MedicationProtocol }) | null;
+  last_treatment: MedicalLog | null;
+  days_since_cleaned: number | null;
+  mortality_7d: number;
+  pending_count: number;
+  overdue_count: number;
+}
+
 // Dashboard response shape
 export interface DashboardKpis {
   headcount: {
@@ -212,8 +384,48 @@ export interface DashboardKpis {
     product_name: string;
     next_due_date: string;
     target: string;
+    pen?: number | null;
+    is_critical?: boolean;
   }>;
+  pens_health_summary: { green: number; amber: number; red: number };
+  pens_strip: Array<{ id: number; role: string; health_status: "green" | "amber" | "red"; pending: number }>;
   census_status: "current" | "overdue";
   last_census_date: string | null;
   zwl_per_usd: number;
+  cash_position_30d: number;
+  pending_payroll: { month: string; total_usd: number; employee_count: number } | null;
+}
+
+// Lineage response
+export interface LineageNode {
+  id: string;
+  tag_id: string;
+  name: string | null;
+  category: string;
+  sex: string;
+  status: string;
+  source: string;
+}
+
+export interface LineageResponse {
+  pig: LineageNode;
+  parents: { mother: LineageNode | null; father: LineageNode | null };
+  grandparents: {
+    maternal_grandmother: LineageNode | null;
+    maternal_grandfather: LineageNode | null;
+    paternal_grandmother: LineageNode | null;
+    paternal_grandfather: LineageNode | null;
+  };
+  great_grandparents: LineageNode[];
+  full_siblings: LineageNode[];
+  half_siblings: LineageNode[];
+  offspring: LineageNode[];
+  coefficient_of_inbreeding: number;
+}
+
+export interface BreedingCheck {
+  allowed: boolean;
+  severity: "block" | "warn" | "ok";
+  reason: string;
+  coefficient: number;
 }

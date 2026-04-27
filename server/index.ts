@@ -4,6 +4,7 @@ import type { Request } from 'express';
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "node:http";
+import { generateReminders } from "./services/reminders";
 
 const app = express();
 const httpServer = createServer(app);
@@ -62,6 +63,14 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  // Generate pen reminders on startup (storage seed has already run as a side-effect)
+  try {
+    const stats = generateReminders();
+    log(`reminders generated :: ${stats.reminders_created} for ${stats.active_pigs} pigs across ${stats.protocols_active} protocols`);
+  } catch (e: any) {
+    console.error("reminder generation failed:", e?.message ?? e);
+  }
+
   await registerRoutes(httpServer, app);
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {

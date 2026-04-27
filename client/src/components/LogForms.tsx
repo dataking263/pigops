@@ -30,6 +30,7 @@ import {
   TREATMENT_TYPES,
   DEATH_CAUSES,
   PIG_CATEGORIES,
+  EXPENSE_CATEGORIES,
 } from "@shared/schema";
 import type { PhotoGateResult } from "@/lib/photoGate";
 import type { Pig } from "@shared/schema";
@@ -570,6 +571,86 @@ export function SaleLogForm({ onDone }: { onDone: () => void }) {
         )}/>
         <Button type="submit" className="w-full" disabled={form.formState.isSubmitting} data-testid="button-sale-submit">
           {form.formState.isSubmitting ? "Saving…" : "Record sale"}
+        </Button>
+      </form>
+    </Form>
+  );
+}
+
+// ---------- EXPENSE ----------
+const expenseSchema = z.object({
+  date: z.string().min(1),
+  category: z.enum(EXPENSE_CATEGORIES),
+  description: z.string().min(1, "Required"),
+  amount_usd: z.coerce.number().positive("Must be > 0"),
+  vendor: z.string().optional(),
+});
+
+export function ExpenseLogForm({ onDone }: { onDone: () => void }) {
+  const { toast } = useToast();
+  const { enqueueMutation } = useApp();
+  const form = useForm<z.infer<typeof expenseSchema>>({
+    resolver: zodResolver(expenseSchema),
+    defaultValues: { date: today(), category: "Feed", description: "", amount_usd: 0, vendor: "" },
+  });
+  const submit = form.handleSubmit(async (values) => {
+    await enqueueMutation({ method: "POST", url: "/api/expenses", body: values, label: "Expense" });
+    queryClient.invalidateQueries({ queryKey: ["/api/expenses"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/budget/summary"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/budget/trend"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/dashboard"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/activity"] });
+    toast({ title: "Expense logged", description: values.category + " · $" + values.amount_usd });
+    onDone();
+  });
+  return (
+    <Form {...form}>
+      <form onSubmit={submit} className="space-y-4">
+        <FormField control={form.control} name="category" render={({ field }) => (
+          <FormItem>
+            <FormLabel>Category</FormLabel>
+            <Select onValueChange={field.onChange} defaultValue={field.value}>
+              <FormControl><SelectTrigger data-testid="select-expense-category"><SelectValue /></SelectTrigger></FormControl>
+              <SelectContent>
+                {EXPENSE_CATEGORIES.map((c) => (
+                  <SelectItem key={c} value={c}>{c}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <FormMessage />
+          </FormItem>
+        )}/>
+        <FormField control={form.control} name="description" render={({ field }) => (
+          <FormItem>
+            <FormLabel>Description</FormLabel>
+            <FormControl><Input {...field} data-testid="input-expense-description" placeholder="e.g. 10 bags Grower feed" /></FormControl>
+            <FormMessage />
+          </FormItem>
+        )}/>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField control={form.control} name="amount_usd" render={({ field }) => (
+            <FormItem>
+              <FormLabel>Amount (USD)</FormLabel>
+              <FormControl><Input type="number" step="0.01" {...field} data-testid="input-expense-amount" /></FormControl>
+              <FormMessage />
+            </FormItem>
+          )}/>
+          <FormField control={form.control} name="date" render={({ field }) => (
+            <FormItem>
+              <FormLabel>Date</FormLabel>
+              <FormControl><Input type="date" {...field} data-testid="input-expense-date" /></FormControl>
+              <FormMessage />
+            </FormItem>
+          )}/>
+        </div>
+        <FormField control={form.control} name="vendor" render={({ field }) => (
+          <FormItem>
+            <FormLabel>Vendor (optional)</FormLabel>
+            <FormControl><Input {...field} data-testid="input-expense-vendor" placeholder="e.g. Profeeds" /></FormControl>
+          </FormItem>
+        )}/>
+        <Button type="submit" className="w-full" disabled={form.formState.isSubmitting} data-testid="button-expense-submit">
+          {form.formState.isSubmitting ? "Saving…" : "Log expense"}
         </Button>
       </form>
     </Form>
